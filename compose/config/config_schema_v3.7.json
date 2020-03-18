@@ -106,7 +106,9 @@
                     "string"
                   ]
                 },
-		"secrets": {"$ref": "#/definitions/build_secrets"}
+                "secrets": {
+                  "$ref": "#/definitions/build_secrets"
+                }
               },
               "additionalProperties": false
             }
@@ -955,25 +957,31 @@
         }
       ]
     },
-
     "build_secrets": {
       "type": "array",
       "uniqueItems": true,
       "items": {
         "oneOf": [
-          {"type": "string"},
+          {
+            "type": "string"
+          },
           {
             "type": "object",
-            "required": ["id"],
+            "required": [
+              "id"
+            ],
             "properties": {
-              "id": {"type": "string"},
-              "src": {"type": "string"}
+              "id": {
+                "type": "string"
+              },
+              "src": {
+                "type": "string"
+              }
             }
           }
         ]
       }
     },
-
     "list_of_strings": {
       "type": "array",
       "items": {

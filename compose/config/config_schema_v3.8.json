@@ -105,6 +105,9 @@
                     "integer",
                     "string"
                   ]
+                },
+                "secrets": {
+                  "$ref": "#/definitions/build_secrets"
                 }
               },
               "additionalProperties": false
@@ -980,6 +983,31 @@
           "$ref": "#/definitions/list_of_strings"
         }
       ]
+    },
+    "build_secrets": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+        "oneOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "object",
+            "required": [
+              "id"
+            ],
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "src": {
+                "type": "string"
+              }
+            }
+          }
+        ]
+      }
     },
     "list_of_strings": {
       "type": "array",
