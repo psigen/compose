@@ -1,12 +1,11 @@
 from __future__ import absolute_import
 from __future__ import unicode_literals
 
-import codecs
-import contextlib
 import logging
 import os
 import re
 
+import dotenv
 import six
 
 from ..const import IS_WINDOWS_PLATFORM
@@ -31,7 +30,7 @@ def split_env(env):
     return key, value
 
 
-def env_vars_from_file(filename):
+def env_vars_from_file(filename, interpolate=True):
     """
     Read in a line delimited file of environment variables.
     """
@@ -39,16 +38,10 @@ def env_vars_from_file(filename):
         raise EnvFileNotFound("Couldn't find env file: {}".format(filename))
     elif not os.path.isfile(filename):
         raise EnvFileNotFound("{} is not a file.".format(filename))
-    env = {}
-    with contextlib.closing(codecs.open(filename, 'r', 'utf-8-sig')) as fileobj:
-        for line in fileobj:
-            line = line.strip()
-            if line and not line.startswith('#'):
-                try:
-                    k, v = split_env(line)
-                    env[k] = v
-                except ConfigurationError as e:
-                    raise ConfigurationError('In file {}: {}'.format(filename, e.msg))
+
+    env = dotenv.dotenv_values(dotenv_path=filename, encoding='utf-8-sig', interpolate=interpolate)
+    for k, v in env.items():
+        env[k] = v if interpolate else v.replace('$', '$$')
     return env
 
 

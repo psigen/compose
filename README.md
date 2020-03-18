@@ -2,6 +2,8 @@ Docker Compose
 ==============
 ![Docker Compose](logo.png?raw=true "Docker Compose Logo")
 
+## :exclamation: The docker-compose project announces that as Python 2 reaches it's EOL, versions 1.25.x will be the last to support it. For more information, please refer to this [issue](https://github.com/docker/compose/issues/6890).
+
 Compose is a tool for defining and running multi-container Docker applications.
 With Compose, you use a Compose file to configure your application's services.
 Then, using a single command, you create and start all the services
@@ -54,7 +56,7 @@ Installation and documentation
 Contributing
 ------------
 
-[![Build Status](https://jenkins.dockerproject.org/buildStatus/icon?job=docker/compose/master)](https://jenkins.dockerproject.org/job/docker/job/compose/job/master/)
+[![Build Status](https://ci-next.docker.com/public/buildStatus/icon?job=compose/master)](https://ci-next.docker.com/public/job/compose/job/master/)
 
 Want to help build Compose? Check out our [contributing documentation](https://github.com/docker/compose/blob/master/CONTRIBUTING.md).
 

@@ -1,18 +1,27 @@
-# -*- mode: python -*-
+# -*- mode: python ; coding: utf-8 -*-
 
 block_cipher = None
 
 a = Analysis(['bin/docker-compose'],
              pathex=['.'],
              hiddenimports=[],
-             hookspath=None,
-             runtime_hooks=None,
+             hookspath=[],
+             runtime_hooks=[],
              cipher=block_cipher)
 
-pyz = PYZ(a.pure, cipher=block_cipher)
+pyz = PYZ(a.pure, a.zipped_data,
+             cipher=block_cipher)
 
 exe = EXE(pyz,
           a.scripts,
+          exclude_binaries=True,
+          name='docker-compose',
+          debug=False,
+          strip=False,
+          upx=True,
+          console=True,
+          bootloader_ignore_signals=True)
+coll = COLLECT(exe,
           a.binaries,
           a.zipfiles,
           a.datas,
@@ -98,10 +107,7 @@ exe = EXE(pyz,
                 'DATA'
             )
           ],
-
-          name='docker-compose',
-          debug=False,
-          strip=None,
+          strip=False,
           upx=True,
-          console=True,
-          bootloader_ignore_signals=True)
+          upx_exclude=[],
+          name='docker-compose-Darwin-x86_64')

@@ -5,6 +5,7 @@ import functools
 import io
 import logging
 import os
+import re
 import string
 import sys
 from collections import namedtuple
@@ -214,6 +215,12 @@ class ConfigFile(namedtuple('_ConfigFile', 'filename config')):
                 .format(self.filename, VERSION_EXPLANATION)
             )
 
+        version_pattern = re.compile(r"^[2-9]+(\.\d+)?$")
+        if not version_pattern.match(version):
+            raise ConfigurationError(
+                'Version "{}" in "{}" is invalid.'
+                .format(version, self.filename))
+
         if version == '2':
             return const.COMPOSEFILE_V2_0
 
@@ -401,7 +408,7 @@ def load(config_details, compatibility=False, interpolate=True):
     configs = load_mapping(
         config_details.config_files, 'get_configs', 'Config', config_details.working_dir
     )
-    service_dicts = load_services(config_details, main_file, compatibility)
+    service_dicts = load_services(config_details, main_file, compatibility, interpolate=interpolate)
 
     if main_file.version != V1:
         for service_dict in service_dicts:
@@ -453,7 +460,7 @@ def validate_external(entity_type, name, config, version):
                 entity_type, name, ', '.join(k for k in config if k != 'external')))
 
 
-def load_services(config_details, config_file, compatibility=False):
+def load_services(config_details, config_file, compatibility=False, interpolate=True):
     def build_service(service_name, service_dict, service_names):
         service_config = ServiceConfig.with_abs_paths(
             config_details.working_dir,
@@ -472,7 +479,8 @@ def load_services(config_details, config_file, compatibility=False):
             service_names,
             config_file.version,
             config_details.environment,
-            compatibility
+            compatibility,
+            interpolate
         )
         return service_dict
 
@@ -672,13 +680,13 @@ class ServiceExtendsResolver(object):
         return filename
 
 
-def resolve_environment(service_dict, environment=None):
+def resolve_environment(service_dict, environment=None, interpolate=True):
     """Unpack any environment variables from an env_file, if set.
     Interpolate environment values if set.
     """
     env = {}
     for env_file in service_dict.get('env_file', []):
-        env.update(env_vars_from_file(env_file))
+        env.update(env_vars_from_file(env_file, interpolate))
 
     env.update(parse_environment(service_dict.get('environment')))
     return dict(resolve_env_var(k, v, environment) for k, v in six.iteritems(env))
@@ -874,11 +882,12 @@ def finalize_service_volumes(service_dict, environment):
     return service_dict
 
 
-def finalize_service(service_config, service_names, version, environment, compatibility):
+def finalize_service(service_config, service_names, version, environment, compatibility,
+                     interpolate=True):
     service_dict = dict(service_config.config)
 
     if 'environment' in service_dict or 'env_file' in service_dict:
-        service_dict['environment'] = resolve_environment(service_dict, environment)
+        service_dict['environment'] = resolve_environment(service_dict, environment, interpolate)
         service_dict.pop('env_file', None)
 
     if 'volumes_from' in service_dict:
@@ -983,12 +992,17 @@ def translate_deploy_keys_to_container_config(service_dict):
 
     deploy_dict = service_dict['deploy']
     ignored_keys = [
-        k for k in ['endpoint_mode', 'labels', 'update_config', 'rollback_config', 'placement']
+        k for k in ['endpoint_mode', 'labels', 'update_config', 'rollback_config']
         if k in deploy_dict
     ]
 
     if 'replicas' in deploy_dict and deploy_dict.get('mode', 'replicated') == 'replicated':
-        service_dict['scale'] = deploy_dict['replicas']
+        scale = deploy_dict.get('replicas', 1)
+        max_replicas = deploy_dict.get('placement', {}).get('max_replicas_per_node', scale)
+        service_dict['scale'] = min(scale, max_replicas)
+        if max_replicas < scale:
+            log.warning("Scale is limited to {} ('max_replicas_per_node' field).".format(
+                max_replicas))
 
     if 'restart_policy' in deploy_dict:
         service_dict['restart'] = {

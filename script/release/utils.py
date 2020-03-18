@@ -4,36 +4,7 @@ from __future__ import unicode_literals
 import os
 import re
 
-from .const import REPO_ROOT
-from compose import const as compose_const
-
-section_header_re = re.compile(r'^[0-9]+\.[0-9]+\.[0-9]+ \([0-9]{4}-[01][0-9]-[0-3][0-9]\)$')
-
-
-class ScriptError(Exception):
-    pass
-
-
-def branch_name(version):
-    return 'bump-{}'.format(version)
-
-
-def read_release_notes_from_changelog():
-    with open(os.path.join(REPO_ROOT, 'CHANGELOG.md'), 'r') as f:
-        lines = f.readlines()
-    i = 0
-    while i < len(lines):
-        if section_header_re.match(lines[i]):
-            break
-        i += 1
-
-    j = i + 1
-    while j < len(lines):
-        if section_header_re.match(lines[j]):
-            break
-        j += 1
-
-    return ''.join(lines[i + 2:j - 1])
+from const import REPO_ROOT
 
 
 def update_init_py_version(version):
@@ -52,15 +23,6 @@ def update_run_sh_version(version):
     contents = re.sub(r'VERSION="[0-9a-z.-]+"', 'VERSION="{}"'.format(version), contents)
     with open(path, 'w') as f:
         f.write(contents)
-
-
-def compatibility_matrix():
-    result = {}
-    for engine_version in compose_const.API_VERSION_TO_ENGINE_VERSION.values():
-        result[engine_version] = []
-    for fmt, api_version in compose_const.API_VERSIONS.items():
-        result[compose_const.API_VERSION_TO_ENGINE_VERSION[api_version]].append(fmt.vstring)
-    return result
 
 
 def yesno(prompt, default=None):

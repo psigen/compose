@@ -11,9 +11,12 @@ from os import path
 import enum
 import six
 from docker.errors import APIError
+from docker.errors import ImageNotFound
+from docker.errors import NotFound
 from docker.utils import version_lt
 
 from . import parallel
+from .cli.errors import UserError
 from .config import ConfigurationError
 from .config.config import V1
 from .config.sort_services import get_container_name_from_network_mode
@@ -25,11 +28,13 @@ from .container import Container
 from .network import build_networks
 from .network import get_networks
 from .network import ProjectNetworks
+from .progress_stream import read_status
 from .service import BuildAction
 from .service import ContainerNetworkMode
 from .service import ContainerPidMode
 from .service import ConvergenceStrategy
 from .service import NetworkMode
+from .service import NoSuchImageError
 from .service import parse_repository_tag
 from .service import PidMode
 from .service import Service
@@ -38,7 +43,6 @@ from .service import ServicePidMode
 from .utils import microseconds_from_time_nano
 from .utils import truncate_string
 from .volume import ProjectVolumes
-
 
 log = logging.getLogger(__name__)
 
@@ -83,10 +87,11 @@ class Project(object):
         return labels
 
     @classmethod
-    def from_config(cls, name, config_data, client, default_platform=None, extra_labels=[]):
+    def from_config(cls, name, config_data, client, default_platform=None, extra_labels=None):
         """
         Construct a Project from a config.Config object.
         """
+        extra_labels = extra_labels or []
         use_networking = (config_data.version and config_data.version != V1)
         networks = build_networks(name, config_data, client)
         project_networks = ProjectNetworks.from_services(
@@ -378,6 +383,7 @@ class Project(object):
 
         def build_service(service):
             service.build(no_cache, pull, force_rm, memory, build_args, gzip, rm, silent, cli, progress)
+
         if parallel_build:
             _, errors = parallel.parallel_execute(
                 services,
@@ -619,49 +625,68 @@ class Project(object):
     def pull(self, service_names=None, ignore_pull_failures=False, parallel_pull=False, silent=False,
              include_deps=False):
         services = self.get_services(service_names, include_deps)
-        images_to_build = {service.image_name for service in services if service.can_be_built()}
-        services_to_pull = [service for service in services if service.image_name not in images_to_build]
-
-        msg = not silent and 'Pulling' or None
 
         if parallel_pull:
-            def pull_service(service):
-                strm = service.pull(ignore_pull_failures, True, stream=True)
-                if strm is None:  # Attempting to pull service with no `image` key is a no-op
-                    return
+            self.parallel_pull(services, silent=silent)
 
+        else:
+            must_build = []
+            for service in services:
+                try:
+                    service.pull(ignore_pull_failures, silent=silent)
+                except (ImageNotFound, NotFound):
+                    if service.can_be_built():
+                        must_build.append(service.name)
+                    else:
+                        raise
+
+            if len(must_build):
+                log.warning('Some service image(s) must be built from source by running:\n'
+                            '    docker-compose build {}'
+                            .format(' '.join(must_build)))
+
+    def parallel_pull(self, services, ignore_pull_failures=False, silent=False):
+        msg = 'Pulling' if not silent else None
+        must_build = []
+
+        def pull_service(service):
+            strm = service.pull(ignore_pull_failures, True, stream=True)
+
+            if strm is None:  # Attempting to pull service with no `image` key is a no-op
+                return
+
+            try:
                 writer = parallel.get_stream_writer()
-
                 for event in strm:
                     if 'status' not in event:
                         continue
-                    status = event['status'].lower()
-                    if 'progressDetail' in event:
-                        detail = event['progressDetail']
-                        if 'current' in detail and 'total' in detail:
-                            percentage = float(detail['current']) / float(detail['total'])
-                            status = '{} ({:.1%})'.format(status, percentage)
-
+                    status = read_status(event)
                     writer.write(
                         msg, service.name, truncate_string(status), lambda s: s
                     )
+            except (ImageNotFound, NotFound):
+                if service.can_be_built():
+                    must_build.append(service.name)
+                else:
+                    raise
 
-            _, errors = parallel.parallel_execute(
-                services_to_pull,
-                pull_service,
-                operator.attrgetter('name'),
-                msg,
-                limit=5,
-            )
-            if len(errors):
-                combined_errors = '\n'.join([
-                    e.decode('utf-8') if isinstance(e, six.binary_type) else e for e in errors.values()
-                ])
-                raise ProjectError(combined_errors)
+        _, errors = parallel.parallel_execute(
+            services,
+            pull_service,
+            operator.attrgetter('name'),
+            msg,
+            limit=5,
+        )
 
-        else:
-            for service in services_to_pull:
-                service.pull(ignore_pull_failures, silent=silent)
+        if len(must_build):
+            log.warning('Some service image(s) must be built from source by running:\n'
+                        '    docker-compose build {}'
+                        .format(' '.join(must_build)))
+        if len(errors):
+            combined_errors = '\n'.join([
+                e.decode('utf-8') if isinstance(e, six.binary_type) else e for e in errors.values()
+            ])
+            raise ProjectError(combined_errors)
 
     def push(self, service_names=None, ignore_push_failures=False):
         unique_images = set()
@@ -820,6 +845,91 @@ def get_secrets(service, service_secrets, secret_defs):
         secrets.append({'secret': secret, 'file': secret_file})
 
     return secrets
+
+
+def get_image_digests(project):
+    digests = {}
+    needs_push = set()
+    needs_pull = set()
+
+    for service in project.services:
+        try:
+            digests[service.name] = get_image_digest(service)
+        except NeedsPush as e:
+            needs_push.add(e.image_name)
+        except NeedsPull as e:
+            needs_pull.add(e.service_name)
+
+    if needs_push or needs_pull:
+        raise MissingDigests(needs_push, needs_pull)
+
+    return digests
+
+
+def get_image_digest(service):
+    if 'image' not in service.options:
+        raise UserError(
+            "Service '{s.name}' doesn't define an image tag. An image name is "
+            "required to generate a proper image digest. Specify an image repo "
+            "and tag with the 'image' option.".format(s=service))
+
+    _, _, separator = parse_repository_tag(service.options['image'])
+    # Compose file already uses a digest, no lookup required
+    if separator == '@':
+        return service.options['image']
+
+    digest = get_digest(service)
+
+    if digest:
+        return digest
+
+    if 'build' not in service.options:
+        raise NeedsPull(service.image_name, service.name)
+
+    raise NeedsPush(service.image_name)
+
+
+def get_digest(service):
+    digest = None
+    try:
+        image = service.image()
+        # TODO: pick a digest based on the image tag if there are multiple
+        # digests
+        if image['RepoDigests']:
+            digest = image['RepoDigests'][0]
+    except NoSuchImageError:
+        try:
+            # Fetch the image digest from the registry
+            distribution = service.get_image_registry_data()
+
+            if distribution['Descriptor']['digest']:
+                digest = '{image_name}@{digest}'.format(
+                    image_name=service.image_name,
+                    digest=distribution['Descriptor']['digest']
+                )
+        except NoSuchImageError:
+            raise UserError(
+                "Digest not found for service '{service}'. "
+                "Repository does not exist or may require 'docker login'"
+                .format(service=service.name))
+    return digest
+
+
+class MissingDigests(Exception):
+    def __init__(self, needs_push, needs_pull):
+        self.needs_push = needs_push
+        self.needs_pull = needs_pull
+
+
+class NeedsPush(Exception):
+    def __init__(self, image_name):
+        self.image_name = image_name
+
+
+class NeedsPull(Exception):
+    def __init__(self, image_name, service_name):
+        self.image_name = image_name
+        self.service_name = service_name
 
 
 class NoSuchService(Exception):

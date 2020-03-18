@@ -32,7 +32,7 @@ def find_version(*file_paths):
 install_requires = [
     'cached-property >= 1.2.0, < 2',
     'docopt >= 0.6.1, < 1',
-    'PyYAML >= 3.10, < 5',
+    'PyYAML >= 3.10, < 6',
     'requests >= 2.20.0, < 3',
     'texttable >= 0.9.0, < 2',
     'websocket-client >= 0.32.0, < 1',
@@ -40,10 +40,12 @@ install_requires = [
     'dockerpty >= 0.4.1, < 1',
     'six >= 1.3.0, < 2',
     'jsonschema >= 2.5.1, < 4',
+    'python-dotenv >= 0.10.5, < 1',
 ]
 
 
 tests_require = [
+    'ddt >= 1.2.2, < 2',
     'pytest < 6',
 ]
 
@@ -59,6 +61,7 @@ extras_require = {
                                 'ipaddress >= 1.0.16, < 2'],
     ':sys_platform == "win32"': ['colorama >= 0.4, < 1'],
     'socks': ['PySocks >= 1.5.6, != 1.5.7, < 2'],
+    'tests': tests_require,
 }
 
 

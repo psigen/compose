@@ -1,6 +1,136 @@
 Change log
 ==========
 
+1.25.1 (2020-01-06)
+-------------------
+
+### Features
+
+- Bump `pytest-cov` 2.8.1
+
+- Bump `flake8` 3.7.9
+
+- Bump `coverage` 4.5.4
+
+### Bugfixes
+
+- Decode APIError explanation to unicode before usage on start and create of a container
+
+- Reports when images that cannot be pulled and must be built
+
+- Discard label `com.docker.compose.filepaths` having None as value. Typically, when coming from stdin
+
+- Added OSX binary as a directory to solve slow start up time caused by MacOS Catalina binary scan
+
+- Passed in HOME env-var in container mode (running with `script/run/run.sh`)
+
+- Reverted behavior of "only pull images that we can't build" and replace by a warning informing the image we can't pull and must be built
+
+
+1.25.0 (2019-11-18)
+-------------------
+
+### Features
+
+- Set no-colors to true if CLICOLOR env variable is set to 0
+
+- Add working dir, config files and env file in service labels
+
+- Add dependencies for ARM build
+
+- Add BuildKit support, use `DOCKER_BUILDKIT=1` and `COMPOSE_DOCKER_CLI_BUILD=1`
+
+- Bump paramiko to 2.6.0
+
+- Add working dir, config files and env file in service labels
+
+- Add tag `docker-compose:latest`
+
+- Add `docker-compose:<version>-alpine` image/tag
+
+- Add `docker-compose:<version>-debian` image/tag
+
+- Bumped `docker-py` 4.1.0
+
+- Supports `requests` up to 2.22.0 version
+
+- Drops empty tag on `build:cache_from`
+
+- `Dockerfile` now generates `libmusl` binaries for alpine
+
+- Only pull images that can't be built
+
+- Attribute `scale` can now accept `0` as a value
+
+- Added `--quiet` build flag
+
+- Added `--no-interpolate` to `docker-compose config`
+
+- Bump OpenSSL for macOS build (`1.1.0j` to `1.1.1c`)
+
+- Added `--no-rm` to `build` command
+
+- Added support for `credential_spec`
+
+- Resolve digests without pulling image
+
+- Upgrade `pyyaml` to `4.2b1`
+
+- Lowered severity to `warning` if `down` tries to remove nonexisting image
+
+- Use improved API fields for project events when possible
+
+- Update `setup.py` for modern `pypi/setuptools` and remove `pandoc` dependencies
+
+- Removed `Dockerfile.armhf` which is no longer needed
+
+### Bugfixes
+
+- Make container service color deterministic, remove red from chosen colors
+
+- Fix non ascii chars error. Python2 only
+
+- Format image size as decimal to be align with Docker CLI
+
+- Use Python Posix support to get tty size
+
+- Fix same file 'extends' optimization
+
+- Use python POSIX support to get tty size
+
+- Format image size as decimal to be align with Docker CLI
+
+- Fixed stdin_open
+
+- Fixed `--remove-orphans` when used with `up --no-start`
+
+- Fixed `docker-compose ps --all`
+
+- Fixed `depends_on` dependency recreation behavior
+
+- Fixed bash completion for `build --memory`
+
+- Fixed misleading warning concerning env vars when performing an `exec` command
+
+- Fixed failure check in parallel_execute_watch
+
+- Fixed race condition after pulling image
+
+- Fixed error on duplicate mount points
+
+- Fixed merge on networks section
+
+- Always connect Compose container to `stdin`
+
+- Fixed the presentation of failed services on 'docker-compose start' when containers are not available
+
+1.24.1 (2019-06-24)
+-------------------
+
+### Bugfixes
+
+- Fixed acceptance tests
+
 1.24.0 (2019-03-28)
 -------------------
 

@@ -1,4 +1,7 @@
 from __future__ import absolute_import
 from __future__ import unicode_literals
 
-__version__ = '1.26.0dev'
+import os
+
+
+REPO_ROOT = os.path.join(os.path.dirname(__file__), '..', '..')
